@@ -1,0 +1,10 @@
+{
+ "model": "models/decider-4b-clean-bf16",
+ "distinct_real_values": 196,
+ "probes": 40,
+ "leaks": [],
+ "echoed_from_prompt": 13,
+ "by_field": {},
+ "detector_works": true,
+ "verdict": "clean"
+}
