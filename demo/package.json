@@ -1,0 +1,13 @@
+{
+  "name": "transaction-decider-demo",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "wrangler dev --port 8788 --ip 127.0.0.1",
+    "deploy": "wrangler deploy",
+    "tail": "wrangler tail"
+  },
+  "devDependencies": {
+    "wrangler": "^4.135.0"
+  }
+}

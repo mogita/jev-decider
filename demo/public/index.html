@@ -1,0 +1,544 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Transaction Decider</title>
+<meta name="description" content="A 4B model that returns a budget category and a calibrated probability in one forward pass, with no text generation.">
+<meta name="color-scheme" content="light dark">
+<style>
+:root {
+  --bg: #f6f7f9;
+  --panel: #ffffff;
+  --ink: #16181d;
+  --muted: #646b7a;
+  --line: #e2e5eb;
+  --field: #fbfcfd;
+  --accent: #3b5bdb;
+  --accent-ink: #ffffff;
+  --bar: #3b5bdb;
+  --bar-dim: #c3cdf5;
+  --warn: #b4501e;
+  --radius: 10px;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0e1116;
+    --panel: #161a21;
+    --ink: #e7e9ee;
+    --muted: #949cad;
+    --line: #262c36;
+    --field: #0f1319;
+    --accent: #7590f0;
+    --accent-ink: #0e1116;
+    --bar: #7590f0;
+    --bar-dim: #2c3550;
+    --warn: #e0a06a;
+  }
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  padding: 0 16px 64px;
+  background: var(--bg);
+  color: var(--ink);
+  font: 15px/1.55 ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+.wrap { max-width: 1040px; margin: 0 auto; }
+header { padding: 48px 0 28px; }
+h1 { margin: 0 0 8px; font-size: clamp(26px, 4vw, 36px); letter-spacing: -0.02em; }
+.lede { margin: 0 0 12px; color: var(--muted); }
+.lede:last-of-type { margin-bottom: 0; }
+.lede strong { color: var(--ink); font-weight: 600; }
+.spec { margin: 14px 0 0; font-size: 12.5px; color: var(--muted);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+.spec a { color: var(--accent); }
+.spec .sep { opacity: 0.5; margin: 0 2px; }
+.dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 5px;
+  background: var(--muted); vertical-align: 1px; }
+.dot[data-state="up"] { background: #2f9e44; }
+.dot[data-state="down"] { background: #c92a2a; }
+main { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 20px; align-items: start; }
+@media (max-width: 800px) { main { grid-template-columns: 1fr; } }
+.panel {
+  min-width: 0;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 20px;
+}
+h2 { margin: 0 0 14px; font-size: 12px; letter-spacing: 0.09em; text-transform: uppercase; color: var(--muted); }
+.presets { margin-bottom: 18px; }
+.preset-group + .preset-group { margin-top: 12px; }
+.preset-title { display: block; font-size: 10.5px; letter-spacing: 0.07em; text-transform: uppercase;
+  color: var(--muted); margin-bottom: 6px; }
+.preset-row { display: flex; flex-wrap: wrap; gap: 5px; }
+.preset {
+  font: inherit;
+  font-size: 12px;
+  line-height: 1.4;
+  padding: 3px 9px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--field);
+  color: var(--muted);
+  cursor: pointer;
+}
+.preset:hover { color: var(--ink); border-color: var(--accent); }
+.preset[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+label { display: block; font-size: 13px; font-weight: 600; margin: 0 0 6px; }
+textarea {
+  width: 100%;
+  background: var(--field);
+  color: var(--ink);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 11px 12px;
+  font: 12.5px/1.6 ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+  resize: vertical;
+}
+textarea:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
+.field { margin-top: 16px; }
+.hint { margin: 8px 0; font-size: 12.5px; color: var(--muted); }
+code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 0.93em; }
+button.run {
+  margin-top: 18px;
+  width: 100%;
+  font: inherit;
+  font-weight: 600;
+  padding: 11px;
+  border: 0;
+  border-radius: 8px;
+  background: var(--accent);
+  color: var(--accent-ink);
+  cursor: pointer;
+}
+button.run { display: flex; align-items: center; justify-content: center; gap: 8px; }
+button.run[disabled] { opacity: 0.7; cursor: progress; }
+.spinner { display: none; width: 14px; height: 14px; border: 2px solid currentColor;
+  border-right-color: transparent; border-radius: 50%; animation: spin 0.6s linear infinite; }
+button.run[disabled] .spinner { display: block; }
+@keyframes spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .spinner { animation-duration: 2s; } }
+/* The hidden attribute only sets display: none at user agent strength, so any rule here that sets display would quietly outrank it and keep a hidden element on screen. */
+[hidden] { display: none !important; }
+.verdict { min-height: 64px; min-width: 0; }
+.verdict .name { font-size: clamp(22px, 3.4vw, 30px); font-weight: 650; letter-spacing: -0.015em; overflow-wrap: anywhere; }
+.verdict .conf { color: var(--muted); font-size: 14px; margin-top: 2px; }
+.verdict .placeholder, .verdict .error { color: var(--muted); font-size: 14px; }
+.verdict .error { color: var(--warn); }
+.bars { list-style: none; margin: 0; padding: 0; display: grid; gap: 7px; }
+.bars li { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 4px 10px; font-size: 13px; }
+/* A caller's own labels run to 80 characters, and a record's first line to whatever was pasted. */
+.bars li > span:first-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.bars .track { grid-column: 1 / -1; height: 5px; border-radius: 3px; background: var(--bar-dim); overflow: hidden; }
+.bars .fill { display: block; height: 100%; background: var(--bar); border-radius: 3px; }
+.bars .p { color: var(--muted); font-variant-numeric: tabular-nums; }
+.answers { list-style: none; margin: 20px 0 0; padding: 0; display: grid; gap: 24px; min-width: 0; }
+.answers > li { min-width: 0; }
+.answers .src { color: var(--muted); font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.answers .pick { font-weight: 650; font-size: 15px; margin-top: 1px; }
+.answers .pick + .bars { margin: 9px 0 0; }
+.timing { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin: 22px 0 0; padding-top: 18px; border-top: 1px solid var(--line); }
+.timing div { min-width: 0; }
+.timing dt { font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); }
+.timing dd { margin: 3px 0 0; font-size: 19px; font-variant-numeric: tabular-nums; }
+.timing dd small { font-size: 12px; color: var(--muted); font-weight: 400; }
+.facts { margin-top: 20px; }
+.facts .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 18px 24px; }
+.facts dt { font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); }
+.facts dd { margin: 4px 0 0; }
+.facts p { color: var(--muted); margin: 18px 0 0; font-size: 13.5px; }
+button.link { margin-top: 8px; font: inherit; font-size: 12.5px; background: none; border: 0;
+  padding: 0; color: var(--accent); cursor: pointer; text-decoration: underline; }
+.badge { margin: 12px 0 0; padding: 7px 10px; border-radius: 7px; font-size: 12.5px;
+  color: var(--warn); background: var(--field); border: 1px solid var(--line); }
+.api { margin-top: 20px; }
+.code { position: relative; }
+.api pre { margin: 0; padding: 13px 44px 13px 14px; background: var(--field); border: 1px solid var(--line);
+  border-radius: 8px; font: 12.5px/1.65 ui-monospace, SFMono-Regular, Menlo, monospace;
+  white-space: pre-wrap; overflow-wrap: anywhere; }
+.api pre.response { margin-top: 16px; color: var(--muted); }
+.copy { position: absolute; top: 8px; right: 8px; font: inherit; font-size: 12px; padding: 3px 9px;
+  border: 1px solid var(--line); border-radius: 6px; background: var(--panel); color: var(--muted); cursor: pointer; }
+.copy:hover { color: var(--ink); border-color: var(--accent); }
+.params { width: 100%; border-collapse: collapse; margin-top: 16px; font-size: 13px; }
+.params th { text-align: left; font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase;
+  color: var(--muted); font-weight: 600; padding: 0 12px 6px 0; border-bottom: 1px solid var(--line); }
+.params td { padding: 7px 12px 7px 0; border-bottom: 1px solid var(--line); vertical-align: top; }
+.params tr:last-child td { border-bottom: 0; }
+.params td:nth-child(2), .params td:nth-child(3) { color: var(--muted); white-space: nowrap; }
+@media (max-width: 620px) { .params td:nth-child(2) { display: none; } .params th:nth-child(2) { display: none; } }
+footer { margin-top: 28px; color: var(--muted); font-size: 12.5px; }
+footer a { color: var(--accent); }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header>
+  <h1>Transaction Decider</h1>
+  <p class="lede">A bank record goes in, a budget category comes out. Jev gave me the idea: the model never writes a sentence. It reads the record once, scores all 17 categories <strong>in that single pass</strong>, and returns the best one. So it cannot invent a category that is not on the list, and it takes the same time whether you offer two categories or twenty.</p>
+  <p class="lede">It runs on my laptop behind a tunnel, so please go easy on it. Nothing you type is stored.</p>
+  <p class="spec">
+    <span class="dot" id="dot" data-state="pending"></span>
+    <a href="https://huggingface.co/Qwen/Qwen3-4B">Qwen3-4B</a> + budget LoRA, merged, 7.5 GB bf16
+    <span class="sep">·</span> limits: 1 field / 10 records / 26 choices / 4000 chars
+    <span class="sep">·</span> rate limit: 25 records per 10s, 100 per minute
+  </p>
+</header>
+
+<main>
+  <section class="panel">
+    <h2>Input</h2>
+    <div class="presets" id="presets"></div>
+
+    <label for="state">Raw input</label>
+    <textarea id="state" rows="7" spellcheck="false"></textarea>
+    <p class="hint">Leave a blank line between records to send up to 10 of them in one call.</p>
+
+    <div class="field">
+      <label for="categories">Categories</label>
+      <p class="hint">One per line, 2 to 26. Leave them alone and the model answers against the trained budget categories. Change them and it answers against yours, measured at 86% on AG News and 47% on emotion, two public sets it never saw. The confidence is noticeably less honest off the trained categories, so treat it as a direction rather than a number.</p>
+      <textarea id="categories" rows="8" spellcheck="false"></textarea>
+      <button class="link" type="button" id="reset-categories">Reset to the trained 17</button>
+    </div>
+
+    <button class="run" id="run"><span class="spinner" aria-hidden="true"></span><span id="run-label">Decide</span></button>
+  </section>
+
+  <section class="panel">
+    <h2>Answer</h2>
+    <div class="verdict" id="verdict"><p class="placeholder">Pick an example, or write your own.</p></div>
+    <p class="badge" id="badge" hidden>Answered against your own categories, not the trained ones.</p>
+    <ol class="answers" id="answers"></ol>
+    <dl class="timing" id="timing" hidden>
+      <div><dt>Model</dt><dd id="t-model">–</dd></div>
+      <div><dt>Network</dt><dd id="t-net">–</dd></div>
+      <div><dt>Total</dt><dd id="t-total">–</dd></div>
+    </dl>
+</section>
+</main>
+
+<section class="panel api">
+  <h2>curl</h2>
+  <p class="hint">No key, no sign-up. This is exactly the request the panel above sends, and it changes as you edit.</p>
+  <div class="code">
+    <button class="copy" type="button" id="copy-curl">Copy</button>
+    <pre id="curl"><code></code></pre>
+  </div>
+  <table class="params">
+    <thead><tr><th>Field</th><th>Type</th><th>Default</th><th></th></tr></thead>
+    <tbody>
+      <tr><td><code>input</code></td><td>string or list</td><td>required</td><td>What to judge. Up to 4000 characters. Send a list of up to 10 records to score them in one call; the answers come back as a list in the same order.</td></tr>
+      <tr><td><code>categories</code></td><td>list</td><td>the trained 17</td><td>Your own categories, 2 to 26 of them.</td></tr>
+    </tbody>
+  </table>
+</section>
+
+<section class="panel facts">
+  <h2>What is running</h2>
+  <dl class="grid">
+    <div><dt>Base model</dt><dd>Qwen3-4B, bf16</dd></div>
+    <div><dt>Adaptation</dt><dd>LoRA, rank 16, alpha 32, 7 projections</dd></div>
+    <div><dt>Training data</dt><dd>64.6k US rows, 8k synthetic Dutch, 452 real Dutch</dd></div>
+    <div><dt>Curriculum</dt><dd>Three stages, decaying rate, real data last</dd></div>
+    <div><dt>Accuracy</dt><dd>69.2% balanced on a merchant-disjoint Dutch holdout, 94.8% on US</dd></div>
+    <div><dt>Decoding</dt><dd>One forward pass, softmax over 17 letter logits</dd></div>
+    <div><dt>Serving</dt><dd>Apple M4 Max, MLX, 214 ms median locally</dd></div>
+    <div><dt>Calibration</dt><dd>0.08 expected calibration error, untuned</dd></div>
+  </dl>
+</section>
+
+<footer>Made by <a href="https://github.com/mogita">@mogita</a></footer>
+
+</div>
+
+<script>
+const API = "/api/v1/decider";
+const $ = (id) => document.getElementById(id);
+
+const BANK = [
+    { label: "Supermarket", input: "Bank description: BEA, Apple Pay ALBERT HEIJN 1428 NR:K9F2QD, 12.03.26/18:41 AMSTERDAM KAARTNUMMER: **1234\nPayee: Albert Heijn\nAmount: -37.82 EUR\nDate: 2026-03-12 (Thursday)\nAccount: ABN AMRO Betaalrekening 1234" },
+    { label: "Streaming", input: "Bank description: SEPA Incasso algemeen doorlopend Incassant: NL92ZZZ334182710000 Naam: Netflix International B.V. Machtiging: MD-4471028 Omschrijving: Klant: 4471029183 IBAN: NL08DEUT0729108475 Kenmerk: DBet284917305\nPayee: Netflix International B.V.\nAmount: -13.99 EUR\nDate: 2026-03-04 (Wednesday)\nAccount: ABN AMRO Betaalrekening 1234" },
+    { label: "Energy bill", input: "Bank description: XCEL ENERGY INTERNET WEB ID: 7QJ4MBZP\nPayee: Xcel Energy\nAmount: -138.22 USD\nDate: 2026-03-01 (Sunday)\nAccount: Wells Fargo Everyday 5510" },
+    { label: "Dinner out", input: "Bank description: CLV*SHAKE SHACK - AUSTIN\nPayee: Shake Shack\nAmount: -42.15 USD\nDate: 2026-03-07 (Saturday)\nAccount: Chase Checking 4412" },
+    { label: "Insurance", input: "Bank description: SEPA Incasso algemeen doorlopend Incassant: NL60ZZZ302704410000 Naam: Zilveren Kruis Zorgverzekeringen N.V. Machtiging: MD-7710294 Omschrijving: Premie maart 2026 IBAN: NL45INGB0006731092 Kenmerk: DBet819274650\nPayee: Zilveren Kruis\nAmount: -147.85 EUR\nDate: 2026-03-03 (Tuesday)\nAccount: ABN AMRO Betaalrekening 1234" },
+    { label: "Salary in", input: "Bank description: SEPA Overboeking IBAN: NL19RABO0341827104 BIC: RABONL2U Naam: Payroll Services B.V. Omschrijving: Salaris maart 2026 Kenmerk: NOTPROVIDED\nPayee: Payroll Services B.V.\nAmount: 4280.00 EUR\nDate: 2026-03-25 (Wednesday)\nAccount: ABN AMRO Betaalrekening 1234" },
+    { label: "Own accounts", input: "Bank description: SEPA Overboeking IBAN: NL77ABNA0518274901 BIC: ABNANL2A Naam: A. de Vries Omschrijving: Overboeking eigen rekening Kenmerk: NOTPROVIDED\nPayee: A. de Vries\nAmount: -1500.00 EUR\nDate: 2026-03-02 (Monday)\nAccount: ABN AMRO Betaalrekening 1234" },
+    { label: "Bank charge", input: "Bank description: ABN AMRO Bank N.V. 1 x Maandelijkse kosten 3,95\nPayee: ABN AMRO Bank N.V.\nAmount: -3.95 EUR\nDate: 2026-03-31 (Tuesday)\nAccount: ABN AMRO Betaalrekening 1234" },
+];
+
+const GROUPS = [
+  { title: "Bank records", presets: BANK },
+  {
+    title: "Custom",
+    presets: [
+    { label: "Support triage", input: "I was charged twice for last month and the second charge has not been refunded.", categories: ["Billing", "Technical fault", "Cancellation", "Account access"] },
+    { label: "News section", input: "Shares fell sharply after the central bank raised rates for the third time this year.", categories: ["World news", "Sports", "Business", "Science and technology"] },
+    { label: "Inbox sorting", input: "Subject: New sign-in from a device in Berlin\nFrom: security@service.example\nIf this was not you, change your password now.", categories: ["Receipt", "Newsletter", "Personal message", "Promotion", "Security alert"] },
+    { label: "Bug severity", input: "The checkout page has returned a 500 error for every customer since the deploy an hour ago. No orders can be completed.", categories: ["Critical", "Major", "Minor", "Cosmetic"] },
+    ],
+  },
+  // An expense, a subscription and an income in one call, so the curl below shows the list form
+  // and the answer panel shows what comes back for each of them.
+  {
+    title: "Batch",
+    presets: [
+    { label: "Three at once", input: [BANK[0], BANK[1], BANK[5]].map((p) => p.input).join("\n\n") },
+    ],
+  },
+];
+
+const PRESETS = GROUPS.flatMap((group) => group.presets);
+
+let trainedCategories = [];
+
+let names = {};
+
+function selectPreset(index) {
+  const preset = PRESETS[index];
+  $("state").value = preset.input;
+  $("categories").value = (preset.categories ?? trainedCategories).join("\n");
+  for (const button of $("presets").querySelectorAll(".preset")) {
+    button.setAttribute("aria-pressed", String(Number(button.dataset.index) === index));
+  }
+  renderCurl();
+}
+
+// A blank line separates records, so one textarea covers both shapes the API takes: a lone record
+// goes up as a string and an object comes back, several go up as a list and come back in order.
+function splitRecords(text) {
+  return text.split(/\n\s*\n/).map((part) => part.trim()).filter(Boolean);
+}
+
+// Categories are sent only when they differ from the trained ones, so an untouched request still reports itself as running on the categories the accuracy numbers were measured against, and the printed curl stays as short as the request really is.
+function requestBody(text) {
+  const records = splitRecords(text);
+  const labels = $("categories").value.split("\n").map((line) => line.trim()).filter(Boolean);
+  const same = labels.length === trainedCategories.length &&
+    labels.every((label, i) => label === trainedCategories[i]);
+  return {
+    input: records.length > 1 ? records : records[0] ?? text,
+    ...(same ? {} : { categories: labels }),
+  };
+}
+
+// Single quoted for the shell, so any quote inside the payload has to be closed and reopened.
+// The body is indented to hang under the opening quote of -d, which sits six columns in.
+function renderCurl() {
+  const body = JSON.stringify(requestBody($("state").value.trim() || "your input here"), null, 2)
+    .split("\n")
+    .map((line, index) => (index === 0 ? line : "      " + line))
+    .join("\n");
+  $("curl").firstChild.textContent = [
+    `curl -s ${location.origin}/api/v1/decider \\`,
+    "  -H 'content-type: application/json' \\",
+    `  -d '${body.replaceAll("'", "'\\''")}'`,
+  ].join("\n");
+}
+
+function buildPresets() {
+  let index = 0;
+  for (const group of GROUPS) {
+    const block = document.createElement("div");
+    block.className = "preset-group";
+    const title = document.createElement("span");
+    title.className = "preset-title";
+    title.textContent = group.title;
+    const row = document.createElement("div");
+    row.className = "preset-row";
+    block.append(title, row);
+    for (const preset of group.presets) {
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = "preset";
+      button.textContent = preset.label;
+      button.dataset.index = String(index++);
+      button.setAttribute("aria-pressed", "false");
+      button.addEventListener("click", (event) => selectPreset(Number(event.target.dataset.index)));
+      row.append(button);
+    }
+    $("presets").append(block);
+  }
+}
+
+function showError(message) {
+  $("answers").replaceChildren();
+  $("timing").hidden = true;
+  $("badge").hidden = true;
+  const p = document.createElement("p");
+  p.className = "error";
+  p.textContent = message;
+  $("verdict").replaceChildren(p);
+}
+
+function headline(title, detail) {
+  const name = document.createElement("div");
+  name.className = "name";
+  name.textContent = title;
+  const conf = document.createElement("div");
+  conf.className = "conf";
+  conf.textContent = detail;
+  $("verdict").replaceChildren(name, conf);
+}
+
+function bar(fraction) {
+  const track = document.createElement("span");
+  track.className = "track";
+  const fill = document.createElement("span");
+  fill.className = "fill";
+  fill.style.width = `${Math.max(fraction * 100, 0.8)}%`;
+  track.append(fill);
+  return track;
+}
+
+// The same chart either way: the five strongest categories and the odds the model gave them.
+function barsList(alternatives) {
+  const list = document.createElement("ul");
+  list.className = "bars";
+  list.append(...alternatives.slice(0, 5).map((alt) => {
+    const row = document.createElement("li");
+    const label = document.createElement("span");
+    label.textContent = names[alt.category] ?? alt.category;
+    const p = document.createElement("span");
+    p.className = "p";
+    p.textContent = `${(alt.p * 100).toFixed(1)}%`;
+    row.append(label, p, bar(alt.p));
+    return row;
+  }));
+  return list;
+}
+
+// A record out of a batch is introduced by what it was and what was picked for it. A lone record
+// gets neither, because the verdict above the chart already carries both.
+function answerBlock(result, source) {
+  const item = document.createElement("li");
+  if (source !== null) {
+    const line = document.createElement("div");
+    line.className = "src";
+    line.textContent = source;
+    const pick = document.createElement("div");
+    pick.className = "pick";
+    pick.textContent = names[result.decision] ?? result.decision;
+    item.append(line, pick);
+  }
+  item.append(barsList(result.alternatives));
+  return item;
+}
+
+// The payee is the readable part of a bank record; anything else is introduced by its first line.
+function sourceLabel(record) {
+  const lines = (record ?? "").split("\n").map((line) => line.trim()).filter(Boolean);
+  return lines.find((line) => line.startsWith("Payee:")) ?? lines[0] ?? "";
+}
+
+// The records come from the request that was sent, not from the box, which the visitor is free to
+// edit while the answer is still in flight.
+function showResult(body, totalMs, records) {
+  // A list in, a list out. Every row of a batch reports the same figure, since they were scored
+  // together and there is one time to report, not one per record.
+  const rows = Array.isArray(body) ? body : [body];
+  const many = rows.length > 1;
+  $("badge").hidden = !rows[0].custom_categories;
+  headline(
+    many ? `${rows.length} records` : names[rows[0].decision] ?? rows[0].decision,
+    many ? `${rows.reduce((sum, row) => sum + row.prompt_tokens, 0)} prompt tokens`
+         : `${(rows[0].confidence * 100).toFixed(1)}% confident · ${rows[0].prompt_tokens} prompt tokens`);
+  $("answers").replaceChildren(...rows.map((row, index) =>
+    answerBlock(row, many ? sourceLabel(records[index]) : null)));
+
+  // The model reports its own compute time, so the rest of the round trip is transport:
+  // browser to the nearest Cloudflare edge, then down the tunnel to the laptop and back.
+  const model = rows[0].latency_ms;
+  $("t-model").textContent = `${Math.round(model)} ms`;
+  $("t-net").textContent = `${Math.max(Math.round(totalMs - model), 0)} ms`;
+  $("t-total").textContent = `${Math.round(totalMs)} ms`;
+  $("timing").hidden = false;
+}
+
+function messageFor(status) {
+  if (status === 429) return "Too fast, please be gentle to my potato.";
+  if (status === 503) return "My laptop is asleep or offline. The page works, the model does not.";
+  return `The request failed (${status}).`;
+}
+
+async function decide() {
+  const state = $("state").value.trim();
+  if (!state) return showError("Write a bank record first.");
+  $("run").disabled = true;
+  $("run-label").textContent = "Deciding";
+  const sent = requestBody(state);
+  const started = performance.now();
+  try {
+    const response = await fetch(API, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(sent),
+    });
+    // A WAF block never reaches the Worker and answers in plain text ("error code: 1015"),
+    // so the body cannot be assumed to be JSON just because the request went to an API path.
+    const raw = await response.text();
+    let body = null;
+    try { body = JSON.parse(raw); } catch { /* not ours */ }
+    if (!response.ok) throw new Error(body?.error ?? messageFor(response.status));
+    showResult(body, performance.now() - started,
+      Array.isArray(sent.input) ? sent.input : [sent.input]);
+  } catch (error) {
+    showError(error.message);
+  } finally {
+    $("run").disabled = false;
+    $("run-label").textContent = "Decide";
+  }
+}
+
+async function loadMeta() {
+  try {
+    const response = await fetch(API);
+    if (response.status === 429) {
+      $("dot").dataset.state = "pending";
+      $("dot").title = "Rate limited, state unknown";
+      throw new Error("rate limited");
+    }
+    const meta = await response.json();
+    names = meta.categories ?? {};
+    trainedCategories = Object.values(names);
+    $("categories").value = trainedCategories.join("\n");
+    $("dot").dataset.state = "up";
+    $("dot").title = "Model online";
+  } catch {
+    $("dot").dataset.state = "down";
+    $("dot").title = "Model offline";
+    showError("My laptop is asleep or offline. The page works, the model does not.");
+  }
+}
+
+buildPresets();
+$("run").addEventListener("click", decide);
+$("reset-categories").addEventListener("click", () => {
+  $("categories").value = trainedCategories.join("\n");
+  renderCurl();
+});
+$("state").addEventListener("keydown", (event) => {
+  if ((event.metaKey || event.ctrlKey) && event.key === "Enter") decide();
+});
+$("copy-curl").addEventListener("click", async () => {
+  const button = $("copy-curl");
+  try {
+    await navigator.clipboard.writeText($("curl").textContent);
+    button.textContent = "Copied";
+  } catch {
+    button.textContent = "Select it";
+  }
+  setTimeout(() => { button.textContent = "Copy"; }, 1600);
+});
+
+for (const id of ["state", "categories"]) {
+  $(id).addEventListener("input", renderCurl);
+}
+
+loadMeta().then(() => selectPreset(0));
+</script>
+</body>
+</html>

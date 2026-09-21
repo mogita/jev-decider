@@ -1,0 +1,21 @@
+# Local credentials and generated private data
+.env
+.env.*
+!.env.example
+node_modules/
+.venv
+.cache/
+__pycache__/
+*.pyc
+runs/
+checkpoints/
+weights/
+data/
+*.safetensors
+*.pt
+*.pth
+.DS_Store
+models/
+demo/.dev.vars
+demo/node_modules/
+demo/.wrangler/

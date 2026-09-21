@@ -1,0 +1,33 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "transaction-decider",
+  "main": "src/worker.js",
+  "compatibility_date": "2026-09-21",
+  "observability": { "enabled": true },
+  // Kept on as a fallback URL that works even when the custom domain is being reconfigured.
+  "workers_dev": true,
+
+  // Assets are served first; only paths with no matching file reach the Worker, which is how /api/v1/decider lands in the fetch handler while / serves index.html.
+  "assets": {
+    "directory": "./public",
+    "not_found_handling": "404-page"
+  },
+
+  // The public site. The Worker serves the page and /api/v1/decider from this one hostname; the model sits behind a different one, because a Worker calling its own custom domain recurses.
+  "routes": [
+    { "pattern": "mojev.mogita.rocks", "custom_domain": true }
+  ],
+
+  "vars": {
+    "ORIGIN": "https://mojev-origin.mogita.com"
+  },
+
+  // period must be 10 or 60. Two per-IP windows catch hammering and grinding; the global one exists because the origin is a single laptop and a distributed flood trips neither.
+  // A namespace_id carries its own limit: editing the limit in place left the limiter inert, so changing a budget means allocating a new id.
+  // The budgets count records, not calls, because one call may carry 25 of them. The laptop scores about five records a second, so 50 records is the ten second window: one address may take half of it, and everyone together may take a little more than all of it, since a queued request still finishes.
+  "ratelimits": [
+    { "name": "BURST", "namespace_id": "2004", "simple": { "limit": 25, "period": 10 } },
+    { "name": "SUSTAINED", "namespace_id": "2005", "simple": { "limit": 100, "period": 60 } },
+    { "name": "GLOBAL", "namespace_id": "2006", "simple": { "limit": 60, "period": 10 } }
+  ]
+}

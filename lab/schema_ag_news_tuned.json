@@ -1,0 +1,16 @@
+{
+ "model": "models/decider-4b-bf16",
+ "task": "ag_news",
+ "rows": 400,
+ "classes": 4,
+ "top1": 0.8425,
+ "balanced": 0.8425,
+ "ece": 0.115,
+ "mean_confidence": 0.9505,
+ "per_label": {
+  "business": 0.93,
+  "scitech": 0.73,
+  "sports": 0.99,
+  "world": 0.72
+ }
+}

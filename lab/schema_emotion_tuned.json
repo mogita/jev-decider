@@ -1,0 +1,18 @@
+{
+ "model": "models/decider-4b-bf16",
+ "task": "emotion",
+ "rows": 396,
+ "classes": 6,
+ "top1": 0.4596,
+ "balanced": 0.4596,
+ "ece": 0.3138,
+ "mean_confidence": 0.7707,
+ "per_label": {
+  "anger": 0.47,
+  "fear": 0.439,
+  "joy": 0.636,
+  "love": 0.227,
+  "sadness": 0.5,
+  "surprise": 0.485
+ }
+}

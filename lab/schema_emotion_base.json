@@ -1,0 +1,18 @@
+{
+ "model": "Qwen/Qwen3-4B",
+ "task": "emotion",
+ "rows": 396,
+ "classes": 6,
+ "top1": 0.4394,
+ "balanced": 0.4394,
+ "ece": 0.541,
+ "mean_confidence": 0.9804,
+ "per_label": {
+  "anger": 0.348,
+  "fear": 0.348,
+  "joy": 0.667,
+  "love": 0.227,
+  "sadness": 0.712,
+  "surprise": 0.333
+ }
+}

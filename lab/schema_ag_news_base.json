@@ -1,0 +1,16 @@
+{
+ "model": "Qwen/Qwen3-4B",
+ "task": "ag_news",
+ "rows": 400,
+ "classes": 4,
+ "top1": 0.8525,
+ "balanced": 0.8525,
+ "ece": 0.1451,
+ "mean_confidence": 0.9976,
+ "per_label": {
+  "business": 0.87,
+  "scitech": 0.7,
+  "sports": 0.99,
+  "world": 0.85
+ }
+}
