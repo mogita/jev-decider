@@ -15,11 +15,11 @@ Callers may bring their own categories, and up to ten records ride in one reques
 | | |
 | --- | --- |
 | Base | Qwen3-4B, LoRA rank 16 alpha 32, merged to bf16 |
-| Accuracy | 69.2% balanced on a merchant-disjoint Dutch holdout, 94.8% on US |
-| Calibration | 0.080 expected calibration error, temperature 1.0 |
-| Unseen schemas | 86.2% on AG News, 47.2% on emotion, neither in training |
-| Latency | 214 ms median on an M4 Max, about 270 ms end to end through the edge |
-| Training cost | 47 minutes, $0.42 of rented GPU |
+| Accuracy | 69.7% balanced on a merchant-disjoint Dutch holdout, 96.0% on US |
+| Calibration | 0.117 expected calibration error, untuned |
+| Unseen schemas | 87.0% on AG News, 46.3% on emotion, neither in training |
+| Latency | 201 ms median on an M4 Max, about 270 ms end to end through the edge |
+| Training cost | 106 minutes, $0.92 of rented GPU |
 
 Full write-up, including the approaches that lost, in [lab/RESULTS.md](lab/RESULTS.md).
 

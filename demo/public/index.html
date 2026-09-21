@@ -200,7 +200,7 @@ footer a { color: var(--accent); }
 
     <div class="field">
       <label for="categories">Categories</label>
-      <p class="hint">One per line, 2 to 26. Leave them alone and the model answers against the trained budget categories. Change them and it answers against yours, measured at 86% on AG News and 47% on emotion, two public sets it never saw. The confidence is noticeably less honest off the trained categories, so treat it as a direction rather than a number.</p>
+      <p class="hint">One per line, 2 to 26. Leave them alone and the model answers against the trained budget categories. Change them and it answers against yours, measured at 87% on AG News and 46% on emotion, two public sets it never saw. The confidence is noticeably less honest off the trained categories, so treat it as a direction rather than a number.</p>
       <textarea id="categories" rows="8" spellcheck="false"></textarea>
       <button class="link" type="button" id="reset-categories">Reset to the trained 17</button>
     </div>
@@ -244,10 +244,10 @@ footer a { color: var(--accent); }
     <div><dt>Adaptation</dt><dd>LoRA, rank 16, alpha 32, 7 projections</dd></div>
     <div><dt>Training data</dt><dd>64.6k US rows, 8k synthetic Dutch, 452 real Dutch</dd></div>
     <div><dt>Curriculum</dt><dd>Three stages, decaying rate, real data last</dd></div>
-    <div><dt>Accuracy</dt><dd>69.2% balanced on a merchant-disjoint Dutch holdout, 94.8% on US</dd></div>
+    <div><dt>Accuracy</dt><dd>69.7% balanced on a merchant-disjoint Dutch holdout, 96.0% on US</dd></div>
     <div><dt>Decoding</dt><dd>One forward pass, softmax over 17 letter logits</dd></div>
-    <div><dt>Serving</dt><dd>Apple M4 Max, MLX, 214 ms median locally</dd></div>
-    <div><dt>Calibration</dt><dd>0.08 expected calibration error, untuned</dd></div>
+    <div><dt>Serving</dt><dd>Apple M4 Max, MLX, 201 ms median locally</dd></div>
+    <div><dt>Calibration</dt><dd>0.12 expected calibration error, untuned</dd></div>
   </dl>
 </section>
 
