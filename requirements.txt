@@ -1,0 +1,16 @@
+# Direct dependencies, at the versions the shipped numbers were measured on. Transitive pins are
+# deliberately absent: this is a lab, not a deployment, and a resolver does that job better.
+#
+# Serving on Apple silicon needs only the first two.
+mlx==0.32.2
+mlx-lm==0.31.3
+
+# Training, export and the evaluation scripts. transformers 5 nests the rope config, which
+# lab/mlx_export.py flattens on the way out, so an older major will not read the same checkpoints.
+torch==2.14.0
+transformers==5.17.0
+peft==0.21.0
+accelerate==1.15.0
+
+# lab/schema_eval.py only, to pull the two public classification sets.
+datasets==5.0.1

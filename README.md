@@ -38,6 +38,10 @@ Full write-up, including the approaches that lost, in [lab/RESULTS.md](lab/RESUL
 ## Running the service
 
 ```bash
+python3 -m venv .venv && .venv/bin/pip install -r requirements.txt
+```
+
+```bash
 python lab/mlx_export.py --adapter runs/s3_full_17/adapter --out models/decider-4b-bf16
 python lab/serve_mlx.py --model models/decider-4b-bf16 --bench 32 --batch 8
 python lab/serve_mlx.py --model models/decider-4b-bf16 --port 8900
@@ -56,4 +60,4 @@ Weights, runs and data are ignored: `data/` holds a personal bank export, `model
 
 ## Lineage
 
-The first attempt used the decision heads from [NanoJev](https://github.com/TianyuCodings/NanoJev), a separate project, and none of its code is here. That approach scores each candidate as its own sequence, which is too slow to serve; the comparison that led to single-token decoding instead is in the write-up.
+The first attempt used the decision heads from [NanoJev](https://github.com/TianyuCodings/NanoJev), a separate project, and none of its code is here. That approach scores each candidate as its own sequence, which is too slow to serve; the comparison that led to single-token decoding instead is in the write-up. One command in that write-up runs in a NanoJev checkout, because the trainer it names belongs to that project and is not vendored here.

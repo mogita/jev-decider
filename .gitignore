@@ -19,3 +19,4 @@ models/
 demo/.dev.vars
 demo/node_modules/
 demo/.wrangler/
+.flash/
