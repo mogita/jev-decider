@@ -18,9 +18,8 @@
     { "pattern": "mojev.mogita.rocks", "custom_domain": true }
   ],
 
-  "vars": {
-    "ORIGIN": "https://mojev-origin.mogita.com"
-  },
+  // ORIGIN and DECIDER_TOKEN are secrets, not vars: the origin hostname names the tunnel that
+  // reaches the machine, and a public repository has no reason to carry it. `wrangler secret put`.
 
   // period must be 10 or 60. Two per-IP windows catch hammering and grinding; the global one exists because the origin is a single laptop and a distributed flood trips neither.
   // A namespace_id carries its own limit: editing the limit in place left the limiter inert, so changing a budget means allocating a new id.

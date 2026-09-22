@@ -114,13 +114,18 @@ npm run dev          # http://127.0.0.1:8788
    and restart `cloudflared` so it reads the new file. A restart drops live SSH sessions on the
    same tunnel.
 
-2. Set the origin hostname in `wrangler.jsonc` under `vars.ORIGIN`, then ship the secret and the
-   Worker:
+2. Ship both secrets, then the Worker:
 
    ```sh
    npx wrangler secret put DECIDER_TOKEN
+   npx wrangler secret put ORIGIN        # the origin hostname, e.g. https://decider.example.com
    npm run deploy
    ```
+
+   `ORIGIN` is a secret rather than a `vars` entry so that a public repository does not name the
+   tunnel that reaches the machine. A bearer token is what actually protects it, but the hostname
+   is free to withhold. A binding cannot be a var and a secret at once, so if it is currently a
+   var, remove it and deploy before running `secret put`.
 
 3. Add the site hostname under `routes` in `wrangler.jsonc` with `custom_domain: true`. That
    hostname must have no DNS record of any kind first, including a tunnel record, or the

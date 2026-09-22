@@ -15,19 +15,86 @@ tags:
 
 # jev-decider, Qwen3-4B LoRA
 
-A LoRA adapter that assigns a budget category to a bank transaction in **one forward pass**, and returns a probability distribution over the categories rather than a sentence.
+LoRA adapter that picks a budget category for a bank transaction in **one forward pass**. Categories are listed as lettered options; the answer is read from the logits at those letter tokens and softmaxed. Nothing is generated.
 
-Live demo: [mojev.mogita.rocks](https://mojev.mogita.rocks). Code, training scripts and evaluation: [github.com/mogita/jev-decider](https://github.com/mogita/jev-decider).
+- An answer outside the list is impossible.
+- Latency is flat in the number of categories. Seventeen cost what two cost.
+- Returns a distribution, not a sentence.
+- Max 26 categories per call, one letter each.
 
-## How it answers
+Demo: [mojev.mogita.rocks](https://mojev.mogita.rocks). Code: [github.com/mogita/jev-decider](https://github.com/mogita/jev-decider).
 
-Nothing is generated. The categories are listed in the prompt as lettered options, the model runs a single forward pass, and the answer is read from the logits at the candidate letter tokens and softmaxed.
+## jev-bench, 17 of 22 sources, 17,773 records
 
-Two properties follow from that, and they are the reason this exists. An answer outside the list is impossible, because the only positions read are the letters offered. And response time does not grow with the number of categories, because they all live in one logit vector: seventeen categories cost exactly what two cost.
+Base is `Qwen3-4B`, no adapter, same rows and prompts. Verdict is McNemar's exact test on the rows where the two disagree, p < 0.05.
 
-The cost is that this is not a chat model. It cannot explain itself, and asking it to generate text gets you the base model's behavior, not this adapter's.
+| Source | Base | This | Verdict |
+|---|---|---|---|
+| `sms_spam` | 58.8% | **83.5%** | better |
+| `chaosnli` | 59.2% | **66.2%** | better |
+| `measuring_hate_speech` | 36.7% | **39.8%** | better |
+| `strategyqa_grounded` | 81.1% | **83.1%** | better |
+| `boolq` | 84.9% | **86.8%** | better |
+| `helpsteer2_helpfulness` | 35.8% | 38.9% | better, p=0.049 |
+| `sst5` | 47.6% | 50.4% | better, p=0.035 |
+| `mnli` | 81.8% | 81.8% | same |
+| `fever_evidence` | 91.5% | 91.6% | same |
+| `mmlu` | 65.9% | 66.4% | same |
+| `helpsteer2_verbosity` | 59.6% | 59.0% | same |
+| `strategyqa_closed` | 62.3% | 63.2% | same |
+| `yelp5` | 63.2% | 64.0% | same |
+| `paws` | 77.8% | 77.2% | same |
+| `arc_challenge` | 87.1% | 87.8% | same |
+| `civil_comments` | 63.7% | **60.6%** | worse |
+| `stsb` | 41.6% | **30.4%** | worse |
 
-## Using it
+5 better, 2 at p just under 0.05, 8 same, 2 worse.
+
+| Macro | Base | This | Verdict |
+|---|---|---|---|
+| Accuracy | 64.6% | **66.5%** | better |
+| Accuracy, minus `sms_spam` | 65.0% | 65.4% | same |
+| ECE, uncalibrated | 32.9% | **21.4%** | better |
+| ECE, temperature fitted | 7.6% | **6.5%** | better |
+| ECE, fitted, minus `chaosnli` + `measuring_hate_speech` | **4.8%** | 5.7% | worse |
+| TVD to human label distributions | 47.6% | **42.9%** | better |
+| Brier (0 to 2, not a percentage) | 0.671 | **0.524** | better |
+
+Per-source verdicts are the test. Macro verdicts are direction only, except `minus sms_spam`, which is +0.45 points and inside the noise.
+
+| Model | Accuracy | ECE | Brier |
+|---|---|---|---|
+| **This adapter, temperature fitted** | 66.5% | **6.5%** | 0.428 |
+| **This adapter, uncalibrated** | 66.5% | 21.4% | 0.524 |
+| Jev 1.13.0 (commercial API) | 74.0% | 10.4% | **0.323** |
+| Qwen3.5-4B, LoRA + residual heads | **74.7%** | 9.7% | 0.324 |
+| Qwen3.5-9B, frozen | 70.1% | 9.5% | 0.354 |
+| Qwen3.5-4B, frozen | 67.0% | 8.7% | 0.373 |
+
+- Behind on accuracy on 14 of 17 sources. Best ECE in the table, worst Brier.
+- The 6.5% needs ~500 labeled rows per task to fit a temperature. With no labeled data you get **21.4%**. Accuracy is identical either way.
+- The 5 skipped sources need 28 to 151 options against the 26-letter ceiling.
+- `chaosnli` ships no validation split, so neither model was fitted on it.
+- The Qwen3.5 rows are a later base generation.
+
+## Transaction categorization, what it was trained for
+
+| Measure | Base | This |
+|---|---|---|
+| Dutch holdout, top-1 | 64.1% | **83.6%** |
+| Dutch holdout, top-3 | — | 94.5% |
+| Dutch holdout, balanced | — | 69.7% |
+| US test, top-1 | — | 96.3% |
+| US test, balanced | — | 96.0% |
+| ECE, 15 bins, uncalibrated | — | 11.7% |
+| AG News, caller's own labels | — | 87.0% |
+| dair-ai/emotion, caller's own labels | — | 46.3% |
+
+Merchant-disjoint: no merchant is in both training and test. The Dutch holdout is 128 rows, so a few points is noise.
+
+Latency: 201 ms median, batch 1, Apple M4 Max via MLX.
+
+## Usage
 
 ```python
 import string, torch
@@ -73,86 +140,30 @@ print(decide("Payee: Albert Heijn\nAmount: -37.82 EUR\nDate: 2026-03-12"))
 # ('🛒 Groceries', 0.996)
 ```
 
-**Bring your own categories.** Pass any 2 to 26 labels and it answers against those instead. That path rides the base model's general ability rather than anything taught here, and the headline numbers below do not cover it; the two measured examples are in the results table.
-
-## Results
-
-Measured on a **merchant-disjoint** Dutch holdout, so no merchant appears in both training and test, and on a public US test split.
-
-| | |
-| --- | ---: |
-| Dutch holdout, top-1 | 83.6% |
-| Dutch holdout, top-3 | 94.5% |
-| Dutch holdout, balanced | 69.7% |
-| US test, top-1 | 96.3% |
-| US test, balanced | 96.0% |
-| Frozen base, same Dutch holdout, top-1 | 64.1% |
-| AG News, caller's own labels, never trained on | 87.0% |
-| dair-ai/emotion, caller's own labels, never trained on | 46.3% |
-| Latency, Apple M4 Max via MLX | 201 ms median |
-
-**Calibration is the weak spot, and it is worse than the accuracy suggests.** Expected calibration error is **0.117** over 15 bins, untuned. The model is more confident than it should be, and fitting a temperature on the development split makes test calibration worse rather than better, which points at the split rather than the method. Treat the probability as a ranking signal, not as a number you can act on directly.
-
-The Dutch holdout is 128 rows. Differences smaller than a few points there are noise.
-
-## On a public benchmark
-
-[jev-bench](https://huggingface.co/datasets/Praveenrajus/jev-bench) v0.1.1 scores decision models on 22 public sources and publishes the same columns for the commercial Jev 1.13.0 API and eighteen open checkpoints. Seventeen of those sources fit under the 26-candidate ceiling, 17,773 test records. Every macro figure below is recomputed over the same seventeen for every model, because the five that are skipped are where all of them score worst.
-
-| Model | Macro acc | ECE | Brier | TVD to human |
-| --- | ---: | ---: | ---: | ---: |
-| **This adapter, one temperature fitted per source** | 0.665 | **0.065** | 0.428 | 0.411 |
-| This adapter, untuned | 0.665 | 0.214 | 0.524 | 0.429 |
-| `Qwen3-4B` frozen, same harness, temperature fitted | 0.646 | 0.076 | 0.484 | 0.454 |
-| Jev 1.13.0, the commercial API | 0.740 | 0.104 | 0.323 | 0.350 |
-| Qwen3.5-4B, LoRA and residual heads | 0.747 | 0.097 | 0.324 | 0.286 |
-| Qwen3.5-4B, frozen | 0.670 | 0.087 | 0.373 | 0.349 |
-
-**Tuning on one narrow schema did not cost general decision ability. It did not buy much either.** Against its own frozen base through the identical harness the adapter is ahead on every macro column, but scored per source by McNemar's exact test on the rows where the two disagree, it is **better on 7, worse on 2, and unchanged on 8**. Two of the seven sit at p = 0.035 and p = 0.049, which across seventeen tests is what an uncorrected threshold produces by chance. And the aggregate is one source: `sms_spam` moves 0.588 to 0.835, and removing it alone takes the macro gain from +1.9 points to **+0.45**, which is noise at these sizes. The worst regression is `stsb`, 0.416 to 0.304. The defensible claim is that a narrow adapter did no broad damage, which was not obvious beforehand; it is not evidence of general transfer.
-
-The same decomposition applies to calibration and is less favorable. Untuned, the adapter is better calibrated than the base on 17 of 17 sources. Once both get a fitted temperature it is better on **7 of 17**, and the 0.065 against 0.076 rests on two sources; remove those two and the frozen base is better, 0.048 to 0.057. So: better calibrated than its base when neither is calibrated, about equal when both are.
-
-Which ECE to quote depends on what you have. The published baselines were all fitted on validation splits before being scored, so **0.065 is the comparable figure** against that board. It also requires roughly 500 labeled rows per task to fit against. **If you have no labeled data for your schema, the number that describes what you get is 0.214.** Accuracy is identical either way, since temperature scaling cannot move an argmax.
-
-Caveats that cut against these numbers rather than for them: the Qwen3.5 rows are a later base generation, so the clean comparison is against our own base and not against them; this model has one primitive, so every yes-or-no source was asked as a two-way choice, which jev-bench's own probes show is the worse geometry for calibration; `chaosnli` ships no validation split, so neither model could be fitted on it and its raw-versus-raw result sits inside a fitted table; this model is behind Jev on 14 of the 17 sources; and nothing here says anything about routing to 77 or 151 options, which is where the interesting failures live.
-
-Harness and full per-source table: [`lab/jevbench_eval.py`](https://github.com/mogita/jev-decider) and `lab/RESULTS.md`.
+Pass any 2 to 26 labels for your own categories. That path rides the base model's ability, not anything taught here, and is not covered by the numbers above.
 
 ## Training
 
-Base `Qwen/Qwen3-4B`, frozen in bf16. LoRA rank 16, alpha 32, dropout 0.05, on all seven attention and MLP projections. 33.0M trainable parameters against a 4.06B base, 0.81%.
+- LoRA r=16, alpha=32, dropout 0.05, all 7 attention and MLP projections, bf16 frozen base. 33.0M trainable of 4.06B, 0.81%.
+- Loss is cross-entropy over the candidate letter logits at one position, the same normalization used at inference.
+- Stage 1: 20,000 rows [us-bank-transaction-categories-v2](https://huggingface.co/datasets/DoDataThings/us-bank-transaction-categories-v2), 1 epoch, lr 1e-4.
+- Stage 2: 8,000 synthetic Dutch rows, in this repo, 1 epoch, lr 7e-5.
+- Stage 3: 452 real de-identified Dutch rows, 6 epochs, lr 3e-5.
+- Class-weighted loss capped at 6x, checkpoint on dev balanced accuracy, seed 17. 106 min on one A40, $0.92.
 
-The loss is cross-entropy over the candidate letter logits at a single position, which is the same normalization used at inference, so nothing is optimized that is not also served.
+## Data
 
-Three stages, in order, with a decaying learning rate and the real data last:
-
-| Stage | Data | Rows | Epochs | LR |
-| --- | --- | ---: | ---: | ---: |
-| 1 | [us-bank-transaction-categories-v2](https://huggingface.co/datasets/DoDataThings/us-bank-transaction-categories-v2) | 20,000 | 1 | 1e-4 |
-| 2 | Synthetic Dutch, included in this repo | 8,000 | 1 | 7e-5 |
-| 3 | Real Dutch export, de-identified, not published | 452 | 6 | 3e-5 |
-
-Class-weighted loss, capped at 6x, because four categories ranked correctly in the top three while almost never placing first. Checkpoint selected on development balanced accuracy. Seed 17. 106 minutes on one NVIDIA A40, about $0.92 of rented GPU.
-
-## Data and privacy
-
-Stage 3 is a personal bank export, and it is **not published**. Before training, every identifier in it was replaced with a shape-preserving stand-in: a twelve digit mandate number became a different twelve digits, account numbers and card digits and IBANs and payment references were regenerated in place, and personal names became generic names of the same shape. Merchant names were deliberately kept, since they are the signal. Verified across all 681 rows that no original value survives and that the set of value shapes is unchanged.
-
-De-identified is not anonymous. Merchants, amounts and dates across nine months remain a behavioral record, which is why the rows stay private even in their cleaned form.
-
-**On extraction.** The training objective computes cross-entropy at one position, over the letters, so no gradient ever reaches the transaction text and the model is never asked to reproduce a record. As a check rather than a substitute for that argument, 40 continuation probes cut real rows just before an identifier and looked for any original value the model supplied itself: none were recovered. The same probe recovers nothing from a model trained on the *unscrubbed* rows either, so treat the probe as consistent with the structural argument rather than as independent evidence. The decisive point for these weights is simpler: the values were never in their training data.
-
-The synthetic Dutch set in this repo was generated from [OpenStreetMap](https://www.openstreetmap.org) merchant names with invented account details. It was checked against the private export and shares no IBAN, card number, account label, mandate or personal name with it.
+- Stage 3 is a personal bank export and is **not published**. Every identifier was replaced with a shape-preserving stand-in before training: twelve digits became different twelve digits, names became generic names. Merchant names were kept, being the signal. Verified across all 681 rows that no original value survives.
+- Loss touches one position, over the letters, so no gradient reaches the transaction text and the model is never asked to reproduce a record. 40 continuation probes recovered nothing. The same probe also recovers nothing from a model trained on the *unscrubbed* rows, so it is consistent with that argument rather than independent evidence. The values were not in the training data.
+- The synthetic Dutch set here was built from [OpenStreetMap](https://www.openstreetmap.org/copyright) merchant names with invented account details. It shares no IBAN, card number, account label, mandate or name with the private export.
+- `data/synth_train.jsonl` is a derivative database of OpenStreetMap and is licensed [ODbL 1.0](https://opendatacommons.org/licenses/odbl/1-0/), © OpenStreetMap contributors. The adapter weights are Apache 2.0, matching the Qwen3-4B base.
 
 ## Limitations
 
-- Seventeen categories, fixed at training time. Other label sets work but are not covered by the headline numbers.
-- At most 26 categories per request, since each candidate is one letter.
-- One field per call. It answers "which category", not several questions at once.
-- Dutch and US transaction formats. Other locales are untested.
-- One seed. No variance measured across seeds on this configuration.
-- Overconfident, as above.
-
-## License
-
-Apache 2.0, matching the Qwen3-4B base. The adapter weights only; the base model is subject to its own license.
+- Overconfident without calibration: ECE 11.7% on its own holdout, 21.4% on jev-bench.
+- 17 categories fixed at training time. Other label sets work but are not covered by the numbers above.
+- At most 26 categories per request. One field per call.
+- Not a chat model. Asking it to generate text gets the base model's behavior.
+- Dutch and US transaction formats. Other locales untested.
+- One seed. No variance measured.
+- Untested above 26 options, which is where the interesting failures are.
