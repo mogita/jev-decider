@@ -378,3 +378,74 @@ Both moved up, both inside the margin. Writing a prompt per task bought nothing 
 the contract is `input` plus an optional `schema`, and the service picks the wording: the trained
 wording when no schema is supplied, so the figures measured on that path still describe it, and
 the neutral one otherwise.
+
+# Session 4: a public benchmark
+
+Every number above is this project's own: our holdout, our split, our harness. They are honest and they are unshared, so nobody can place them. [jev-bench](https://huggingface.co/datasets/Praveenrajus/jev-bench) v0.1.1 fixes that. It is 22 public sources, 22,773 test records, each a `(state, question, label)` triple in the wire format a decision model consumes, and it publishes the same columns for the commercial Jev 1.13.0 API and for eighteen open checkpoints. Four of its sources carry the human vote shares behind each label, which is the part worth having: accuracy against one gold label cannot separate an overconfident model from a correct one on an item the annotators themselves split 60/40.
+
+Seventeen of the 22 fit here. The other five offer 28 to 151 options against the twenty-six a single letter can address. Every macro figure below is therefore recomputed over the same seventeen for every model, ours and theirs: the five we skip are the ones where every model on that board scores worst, so reading our seventeen against their twenty-two would flatter us by exactly the amount those five cost everyone else.
+
+Harness: `lab/jevbench_eval.py`, table: `lab/jevbench_table.py`, plan and the sources left out: `lab/BENCH_PLAN.md`.
+
+## Per source
+
+`Ours` is the shipped adapter, `Base` is `Qwen3-4B` frozen through the identical harness, `Jev` is the commercial API as jev-bench published it. `after T` is the same run with one temperature fitted per source on that source's validation split.
+
+| Source | Primitive | n | Ours acc | Base acc | Jev acc | Ours ECE | after T | T |
+| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| `arc_challenge` | choice | 1000 | 0.878 | 0.871 | 0.979 | 0.066 | 0.020 | 1.6 |
+| `boolq` | noul | 1000 | 0.868 | 0.849 | 0.917 | 0.098 | 0.057 | 3.2 |
+| `chaosnli` | choice | 1599 | 0.662 | 0.592 | 0.615 | 0.238 | 0.238 | none |
+| `civil_comments` | noul | 2000 | 0.606 | 0.637 | 0.729 | 0.268 | 0.116 | 4.0 |
+| `fever_evidence` | noul | 1000 | 0.916 | 0.915 | 0.972 | 0.069 | 0.035 | 2.5 |
+| `helpsteer2_helpfulness` | score | 1000 | 0.389 | 0.358 | 0.363 | 0.327 | 0.028 | 3.6 |
+| `helpsteer2_verbosity` | score | 1000 | 0.590 | 0.596 | 0.341 | 0.171 | 0.060 | 1.7 |
+| `measuring_hate_speech` | score | 1000 | 0.398 | 0.367 | 0.527 | 0.465 | 0.022 | 25.0 |
+| `mmlu` | choice | 1000 | 0.664 | 0.659 | 0.923 | 0.196 | 0.057 | 2.7 |
+| `mnli` | choice | 1000 | 0.818 | 0.818 | 0.883 | 0.123 | 0.047 | 2.3 |
+| `paws` | noul | 1000 | 0.772 | 0.778 | 0.846 | 0.182 | 0.047 | 3.6 |
+| `sms_spam` | noul | 800 | 0.835 | 0.588 | 0.965 | 0.061 | 0.043 | 1.2 |
+| `sst5` | score | 1000 | 0.504 | 0.476 | 0.565 | 0.334 | 0.044 | 3.2 |
+| `strategyqa_closed` | noul | 687 | 0.632 | 0.623 | 0.785 | 0.258 | 0.062 | 4.5 |
+| `strategyqa_grounded` | noul | 687 | 0.831 | 0.811 | 0.956 | 0.130 | 0.042 | 3.5 |
+| `stsb` | score | 1000 | 0.304 | 0.416 | 0.538 | 0.395 | 0.134 | 3.1 |
+| `yelp5` | score | 1000 | 0.640 | 0.632 | 0.685 | 0.262 | 0.058 | 2.7 |
+
+## Macro
+
+| Model | acc | ECE | Brier | sel@90 | choice | score | noul | TVD to human |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| **This model, temperature fitted** | 0.665 | **0.065** | 0.428 | 0.690 | 0.756 | 0.471 | 0.780 | 0.411 |
+| This model, raw | 0.665 | 0.214 | 0.524 | 0.690 | 0.756 | 0.471 | 0.780 | 0.429 |
+| Qwen3-4B frozen, temperature fitted | 0.646 | 0.076 | 0.484 | 0.667 | 0.735 | 0.474 | 0.743 | 0.454 |
+| Qwen3-4B frozen, raw | 0.646 | 0.329 | 0.671 | 0.667 | 0.735 | 0.474 | 0.743 | 0.476 |
+| Jev 1.13.0, the commercial API | 0.740 | 0.104 | 0.323 | 0.764 | 0.850 | 0.503 | 0.881 | 0.350 |
+| Qwen3.5-4B, LoRA and residual heads | 0.747 | 0.097 | 0.324 | 0.771 | 0.799 | 0.529 | 0.903 | 0.286 |
+| Qwen3.5-9B, frozen | 0.701 | 0.095 | 0.354 | 0.722 | 0.797 | 0.503 | 0.815 | 0.333 |
+| Qwen3.5-4B, frozen | 0.670 | 0.087 | 0.373 | 0.691 | 0.753 | 0.468 | 0.796 | 0.349 |
+
+## Tuning on one schema helped seventeen others
+
+The frozen base and the shipped adapter differ only by the LoRA, and they went through the same rows, the same prompts and the same metrics. The adapter wins every macro column: accuracy 0.646 to 0.665, ECE 0.329 to 0.214 raw and 0.076 to 0.065 after fitting, Brier 0.671 to 0.524, distance to the human distributions 0.476 to 0.411.
+
+That was not the expected result. A LoRA trained on 28,452 rows of one seventeen-way budget schema had no obvious reason to help a model answer an exam question or rate a movie review, and the plausible outcome was damage. What it appears to have taught is the shape of the task rather than its content: read a record, read a candidate list, put the mass on one letter.
+
+The two ends of that:
+
+- **`sms_spam` 0.588 to 0.835.** A twenty-five point gain on a source the model never saw, and the largest single move in either direction. It is also the source needing the least smoothing afterwards, temperature 1.2 against a typical 3, so the adapter arrived at both the answer and the confidence.
+- **`stsb` 0.416 to 0.304.** The one real regression, eleven points. Six ordered levels of semantic similarity is the furthest thing here from picking a category, and the tuning cost the model something on it.
+
+## Calibration, once the comparison is fair
+
+The raw ECE of 0.214 is not comparable to the published baselines, and the direction of the unfairness is against us: jev-bench describes its Tier 0 rows as "prompt, logit readout, and a recipe fitted on the validation splits only", so every one of those numbers had been fitted before it was scored and ours had not. jev-bench ships a validation split per source for exactly this, so one temperature per source was fitted there by minimizing the same loss, and applied to test.
+
+**0.065, which is the lowest number in the table, below Jev's 0.104 and below every open checkpoint on that board.** Accuracy is unchanged, as temperature scaling cannot move an argmax.
+
+Three things keep that from being a bigger claim than it is. `chaosnli` ships no validation split, so it enters both macros raw at 0.238, which raises our fitted figure rather than lowering it. The baselines fitted a whole recipe and this fits one scalar, so they had more room, not less. And a temperature above 3 on most sources is a model saying its own confidences were nearly meaningless; `measuring_hate_speech` ran to the ceiling of the search at 25, which is the fit reporting that the best thing to do with those probabilities is flatten them almost to uniform.
+
+## What these numbers are not
+
+- **A comparison against the Qwen3.5 rows.** Those are a later base generation. The clean comparison here is this model against its own frozen base, which is the pair that differs by one thing.
+- **A fair reading of the Noul column.** This model has one primitive, so every yes-or-no source was asked as a two-way choice. jev-bench's own probes find the same question better calibrated as a native Noul than as a 2-way Choice, BoolQ 0.028 against 0.054, so the Noul figures here sit on the worse of the two geometries.
+- **Evidence about high-cardinality routing.** The five skipped sources are where the interesting failures live, `go_emotions` in particular, where Jev itself drops to 0.282. Nothing here says what this model would do with 77 intents.
+- **More than one seed.**

@@ -18,10 +18,11 @@ Callers may bring their own categories, and up to ten records ride in one reques
 | Accuracy | 69.7% balanced on a merchant-disjoint Dutch holdout, 96.0% on US |
 | Calibration | 0.117 expected calibration error, untuned |
 | Unseen schemas | 87.0% on AG News, 46.3% on emotion, neither in training |
+| Public benchmark | [jev-bench](https://huggingface.co/datasets/Praveenrajus/jev-bench), 17 of 22 sources: 0.665 macro accuracy, 0.065 ECE with a temperature fitted per source. The frozen base scores 0.646 and 0.076 through the same harness |
 | Latency | 201 ms median on an M4 Max, about 270 ms end to end through the edge |
 | Training cost | 106 minutes, $0.92 of rented GPU |
 
-Full write-up, including the approaches that lost, in [lab/RESULTS.md](lab/RESULTS.md).
+Full write-up, including the approaches that lost, in [lab/RESULTS.md](lab/RESULTS.md). The weights are on the Hub at [mogita/jev-decider-qwen3-4b](https://huggingface.co/mogita/jev-decider-qwen3-4b), and [MODEL_CARD.md](MODEL_CARD.md) is the card published with them.
 
 ## Layout
 
@@ -32,6 +33,7 @@ Full write-up, including the approaches that lost, in [lab/RESULTS.md](lab/RESUL
 | `lab/qlora_train.py` | the trainer that produced the shipped adapter |
 | `lab/mlx_export.py` | merge the adapter into the base and convert to MLX |
 | `lab/calibrate.py`, `lab/schema_eval.py`, `lab/ablate.py` | measurement |
+| `lab/jevbench_eval.py`, `lab/jevbench_table.py` | the public benchmark and the comparison table |
 | `lab/build_lunchmoney.py`, `lab/synth_nl.py`, `lab/us_convert.py` | dataset building |
 | `demo/` | the public page and the Cloudflare Worker in front of the model |
 
