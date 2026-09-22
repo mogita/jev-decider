@@ -424,24 +424,30 @@ Harness: `lab/jevbench_eval.py`, table: `lab/jevbench_table.py`, plan and the so
 | Qwen3.5-9B, frozen | 0.701 | 0.095 | 0.354 | 0.722 | 0.797 | 0.503 | 0.815 | 0.333 |
 | Qwen3.5-4B, frozen | 0.670 | 0.087 | 0.373 | 0.691 | 0.753 | 0.468 | 0.796 | 0.349 |
 
-## Tuning on one schema helped seventeen others
+## Against its own frozen base: one real transfer, and a macro that does not survive inspection
 
-The frozen base and the shipped adapter differ only by the LoRA, and they went through the same rows, the same prompts and the same metrics. The adapter wins every macro column: accuracy 0.646 to 0.665, ECE 0.329 to 0.214 raw and 0.076 to 0.065 after fitting, Brier 0.671 to 0.524, distance to the human distributions 0.476 to 0.411.
+The frozen base and the shipped adapter differ only by the LoRA, and they went through the same rows, the same prompts and the same metrics. Every macro column moves the adapter's way: accuracy 0.646 to 0.665, ECE 0.329 to 0.214 raw and 0.076 to 0.065 after fitting, Brier 0.671 to 0.524, distance to the human distributions 0.476 to 0.411. Taking that at face value would be a mistake, and decomposing it is the point of this section.
 
-That was not the expected result. A LoRA trained on 28,452 rows of one seventeen-way budget schema had no obvious reason to help a model answer an exam question or rate a movie review, and the plausible outcome was damage. What it appears to have taught is the shape of the task rather than its content: read a record, read a candidate list, put the mass on one letter.
+**Accuracy: 11 sources better, 4 worse, 2 unchanged, and the macro is one source.** Ten of the eleven gains are under 3.1 points. The eleventh is `sms_spam`, 0.588 to 0.835. Drop that one source and the macro goes from +1.9 points to **+0.45**, which is nothing at these sample sizes. The regressions are `stsb` at 11.2 points, `civil_comments` at 3.2, and `paws` and `helpsteer2_verbosity` at 0.6 each.
 
-The two ends of that:
+So the honest accuracy finding is not "tuning on one schema helped seventeen others". It is **"tuning on one schema helped one of seventeen a lot, hurt one a lot, and did nothing measurable to the other fifteen"**. That is still a result worth having, because the plausible prior was broad damage and there is none. It is not evidence of general transfer.
 
-- **`sms_spam` 0.588 to 0.835.** A twenty-five point gain on a source the model never saw, and the largest single move in either direction. It is also the source needing the least smoothing afterwards, temperature 1.2 against a typical 3, so the adapter arrived at both the answer and the confidence.
-- **`stsb` 0.416 to 0.304.** The one real regression, eleven points. Six ordered levels of semantic similarity is the furthest thing here from picking a category, and the tuning cost the model something on it.
+- **`sms_spam` 0.588 to 0.835.** Twenty-five points on a source never seen. It also needs the least smoothing afterwards, temperature 1.2 against a typical 3, so the adapter arrived at both the answer and the confidence. Why this source and not the others is unexplained; the nearest guess is that a short transactional string with a two-way commercial judgment is the closest thing here to a bank record, and that is a guess.
+- **`stsb` 0.416 to 0.304.** Six ordered levels of semantic similarity, the furthest thing here from picking a category, and the tuning cost eleven points.
 
 ## Calibration, once the comparison is fair
 
 The raw ECE of 0.214 is not comparable to the published baselines, and the direction of the unfairness is against us: jev-bench describes its Tier 0 rows as "prompt, logit readout, and a recipe fitted on the validation splits only", so every one of those numbers had been fitted before it was scored and ours had not. jev-bench ships a validation split per source for exactly this, so one temperature per source was fitted there by minimizing the same loss, and applied to test.
 
-**0.065, which is the lowest number in the table, below Jev's 0.104 and below every open checkpoint on that board.** Accuracy is unchanged, as temperature scaling cannot move an argmax.
+**Against the published board that gives 0.065, the lowest figure on it, below Jev's 0.104 and below every open checkpoint.** Accuracy is unchanged, as temperature scaling cannot move an argmax.
 
-Three things keep that from being a bigger claim than it is. `chaosnli` ships no validation split, so it enters both macros raw at 0.238, which raises our fitted figure rather than lowering it. The baselines fitted a whole recipe and this fits one scalar, so they had more room, not less. And a temperature above 3 on most sources is a model saying its own confidences were nearly meaningless; `measuring_hate_speech` ran to the ceiling of the search at 25, which is the fit reporting that the best thing to do with those probabilities is flatten them almost to uniform.
+**Against its own base the same decomposition applies, and it goes the other way.** Untuned, the adapter is better calibrated on 17 of 17 sources, which is a real and broad effect but a low bar, since it only says the adapter is less overconfident than an untuned base. Once both are fitted the adapter is better on **7 of 17**, and the macro gap of 0.065 against 0.076 rests on two sources: `chaosnli`, at 0.238 against 0.389, and `measuring_hate_speech`, at 0.022 against 0.174. Remove those two and **the frozen base is better calibrated than the adapter, 0.048 to 0.057**.
+
+`chaosnli` is the more awkward of the pair, because it ships no validation split and so neither model could be fitted on it at all; its contribution is a raw-versus-raw comparison sitting inside a fitted table. So the defensible claim is narrow: this adapter is better calibrated than its base *when neither is calibrated*, and roughly equal or slightly worse *when both are*.
+
+Two further limits on the 0.065. The baselines fitted a whole recipe and this fits one scalar, so they had more room, not less. And a temperature above 3 on most sources is the fit reporting that the model's own confidences carried little information; `measuring_hate_speech` ran to the ceiling of the search at 25, which says the best available treatment of those probabilities is to flatten them almost to uniform.
+
+One practical difference that no column shows: the 0.065 needs roughly 500 labeled validation rows per task to fit against. Jev's 0.104 needs nothing. For a caller who has no labeled data for their schema, the honest number to quote from this model is **0.214**, not 0.065.
 
 ## What these numbers are not
 
