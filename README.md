@@ -65,3 +65,11 @@ The export stays private, in both forms. `lab/scrub_pii.py` rewrites its identif
 ## Lineage
 
 The first attempt used the decision heads from [NanoJev](https://github.com/TianyuCodings/NanoJev), a separate project, and none of its code is here. That approach scores each candidate as its own sequence, which is too slow to serve; the comparison that led to single-token decoding instead is in the write-up. One command in that write-up runs in a NanoJev checkout, because the trainer it names belongs to that project and is not vendored here.
+
+## Licensing
+
+The code is [Apache 2.0](LICENSE). Two parts of the repository are not, because they carry someone else's licence with them.
+
+`lab/merchants_nl.json` is a derivative database of [OpenStreetMap](https://www.openstreetmap.org/copyright), built by `lab/osm_merchants.py` from an OSM extract, and OpenStreetMap data is licensed [ODbL 1.0](https://opendatacommons.org/licenses/odbl/1-0/). It is offered here under the same terms, © OpenStreetMap contributors. The synthetic Dutch set generated from it by `lab/synth_nl.py`, and published alongside the weights, is a derivative database too and carries the same terms and the same attribution.
+
+The trained weights are a Produced Work rather than a derivative database, so they are Apache 2.0 to match the Qwen3-4B base, with OpenStreetMap credited. That reading is stated so anyone who disagrees with it can see what was assumed.
