@@ -428,9 +428,31 @@ Harness: `lab/jevbench_eval.py`, table: `lab/jevbench_table.py`, plan and the so
 
 The frozen base and the shipped adapter differ only by the LoRA, and they went through the same rows, the same prompts and the same metrics. Every macro column moves the adapter's way: accuracy 0.646 to 0.665, ECE 0.329 to 0.214 raw and 0.076 to 0.065 after fitting, Brier 0.671 to 0.524, distance to the human distributions 0.476 to 0.411. Taking that at face value would be a mistake, and decomposing it is the point of this section.
 
-**Accuracy: 11 sources better, 4 worse, 2 unchanged, and the macro is one source.** Ten of the eleven gains are under 3.1 points. The eleventh is `sms_spam`, 0.588 to 0.835. Drop that one source and the macro goes from +1.9 points to **+0.45**, which is nothing at these sample sizes. The regressions are `stsb` at 11.2 points, `civil_comments` at 3.2, and `paws` and `helpsteer2_verbosity` at 0.6 each.
+Both models answered the same rows, so the verdict per source is McNemar's exact test on the rows where they disagree. Rows they answer alike carry no information about which is better, and an unpaired comparison throws that away. `lab/jevbench_table.py --verdict` prints this.
 
-So the honest accuracy finding is not "tuning on one schema helped seventeen others". It is **"tuning on one schema helped one of seventeen a lot, hurt one a lot, and did nothing measurable to the other fifteen"**. That is still a result worth having, because the plausible prior was broad damage and there is none. It is not evidence of general transfer.
+| Field | Base | This | Verdict | Flips won / lost | p |
+| --- | ---: | ---: | --- | ---: | ---: |
+| `sms_spam` | 0.588 | 0.835 | **better** | 207 / 9 | 4.7e-50 |
+| `chaosnli` | 0.592 | 0.662 | **better** | 194 / 82 | 1.2e-11 |
+| `measuring_hate_speech` | 0.367 | 0.398 | **better** | 39 / 8 | 5.5e-06 |
+| `boolq` | 0.849 | 0.868 | **better** | 31 / 12 | 0.0054 |
+| `strategyqa_grounded` | 0.811 | 0.831 | **better** | 24 / 10 | 0.024 |
+| `sst5` | 0.476 | 0.504 | **better** | 96 / 68 | 0.035 |
+| `helpsteer2_helpfulness` | 0.358 | 0.389 | **better** | 132 / 101 | 0.049 |
+| `mnli` | 0.818 | 0.818 | same | 44 / 44 | 1 |
+| `fever_evidence` | 0.915 | 0.916 | same | 25 / 24 | 1 |
+| `mmlu` | 0.659 | 0.664 | same | 55 / 50 | 0.70 |
+| `helpsteer2_verbosity` | 0.596 | 0.590 | same | 52 / 58 | 0.63 |
+| `strategyqa_closed` | 0.623 | 0.632 | same | 31 / 25 | 0.50 |
+| `yelp5` | 0.632 | 0.640 | same | 56 / 48 | 0.49 |
+| `paws` | 0.778 | 0.772 | same | 22 / 28 | 0.48 |
+| `arc_challenge` | 0.871 | 0.878 | same | 33 / 26 | 0.43 |
+| `civil_comments` | 0.637 | 0.606 | **worse** | 76 / 140 | 1.6e-05 |
+| `stsb` | 0.416 | 0.304 | **worse** | 38 / 150 | 6.1e-17 |
+
+**Seven better, two worse, eight unchanged, and the macro is one source.** Six of the seven gains are between 1.9 and 7.0 points; the seventh is `sms_spam` at 24.7. Drop that one and the macro goes from +1.9 points to **+0.45**, which is nothing at these sizes. Two of the seven, `sst5` and `helpsteer2_helpfulness`, sit at p = 0.035 and p = 0.049, which across seventeen tests is what an uncorrected threshold produces by chance; under any multiple-comparison correction they join the "same" column and the count becomes five better, two worse, ten unchanged.
+
+So the honest accuracy finding is not "tuning on one schema helped seventeen others". It is **"tuning on one schema helped five to seven of them, hurt two, and did nothing measurable to the rest, with almost all of the aggregate coming from a single source"**. That is still worth having, because the plausible prior was broad damage and there is none. It is not evidence of general transfer.
 
 - **`sms_spam` 0.588 to 0.835.** Twenty-five points on a source never seen. It also needs the least smoothing afterwards, temperature 1.2 against a typical 3, so the adapter arrived at both the answer and the confidence. Why this source and not the others is unexplained; the nearest guess is that a short transactional string with a two-way commercial judgment is the closest thing here to a bank record, and that is a guess.
 - **`stsb` 0.416 to 0.304.** Six ordered levels of semantic similarity, the furthest thing here from picking a category, and the tuning cost eleven points.
